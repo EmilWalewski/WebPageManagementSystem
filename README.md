@@ -1,5 +1,5 @@
-# WebPageManagementSystem
+# WebSiteManagementSystem
 
-This program allow register user to manipulate a content of preware.cba.pl website.
+This program allow register user to manipulate a content of website.
 
 - Software is in developing process
