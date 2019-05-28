@@ -6,13 +6,13 @@ import com.sun.javafx.css.Style;
 import desktopApp.MailSender.SendEmail;
 import desktopApp.api.IServer;
 import desktopApp.config.Config;
-import desktopApp.implementation.Orders;
-import desktopApp.implementation.Products;
-import desktopApp.implementation.User;
-import desktopApp.implementation.UserOrderDate;
+import desktopApp.implementation.*;
 import eu.hansolo.medusa.Gauge;
 import eu.hansolo.medusa.GaugeBuilder;
 import eu.hansolo.medusa.skins.SpaceXSkin;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -43,11 +43,30 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import javafx.util.Duration;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+import org.hibernate.boot.model.source.internal.hbm.HibernateTypeSourceImpl;
+import org.hibernate.boot.model.source.spi.HibernateTypeSource;
+import org.hibernate.jpa.HibernatePersistenceProvider;
+import org.hibernate.jpa.HibernateQuery;
+import org.hibernate.proxy.HibernateProxy;
+import org.hibernate.proxy.HibernateProxyHelper;
+import org.hibernate.query.Query;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import javax.persistence.EntityManager;
+import javax.persistence.EntityManagerFactory;
+import javax.persistence.Persistence;
 import java.io.*;
+import java.nio.file.CopyOption;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -68,7 +87,7 @@ public class Controller{
     ProgressIndicator prog;
 
     @FXML
-    AnchorPane mainPane, dashBoardInformation, subUsersContentPane;
+    AnchorPane mainPane, dashBoardInformation, subUsersContentPane, setPaneGuage1, setPaneGuage2, setPaneGuage3;
 
     @FXML
     Label topLabel; // tabs tilted label
@@ -104,7 +123,10 @@ public class Controller{
     TableView<User> usersTableView;
 
     @FXML
-    TableView ordersTableView, productsTableView;
+    TableView ordersTableView;
+
+    @FXML
+    TableView<Products> productsTableView;
 
     @FXML
     TableView<Products> manageProductsTableView;
@@ -140,6 +162,14 @@ public class Controller{
     @FXML
     private HBox xBoxMessageFormSet;
 
+    @FXML
+    private Label idOldProduct, nameOldProduct, priceOldProduct, idNewProduct, nameNewProduct, priceNewProduct;
+
+    @FXML
+    private TextField manageNewID, manageNewName, manageNewPrice;
+
+    private Alert globalAlert;
+//
 
     //@FXML
     //LineChart dashBoardLineChart;
@@ -183,102 +213,146 @@ public class Controller{
 
     @Autowired
     SendEmail sendEmail;
-    Scanner scanner;
+    Scanner scannerRead, scannerWrite;
     File file;
     StringBuilder sb;
 
     public void addNewMailForm(){
         JFXButton jfxButton = new JFXButton();
-        jfxButton.setId("email"+xBoxMessageFormSet.getChildren().size());
+        jfxButton.setId("email"+(xBoxMessageFormSet.getChildren().size()-1));
         jfxButton.setPrefSize(135,163);
         jfxButton.setAlignment(Pos.CENTER);
         jfxButton.setPadding(new Insets(0,0,0,2));
         ImageView imageView = new ImageView();
-        imageView.setImage(new Image("file:\\E:\\InteliJ\\ElectraCodeSystem\\src\\main\\resources\\sendMessageTextImage.png"));
+        imageView.setImage(new Image(this.getClass().getResource("/sendMessageTextImage.png").toExternalForm()));
         imageView.setFitWidth(107);
         imageView.setFitHeight(137);
         jfxButton.setGraphic(imageView);
         jfxButton.getStyleClass().add("emailPressed");
-        xBoxMessageFormSet.getChildren().add(xBoxMessageFormSet.getChildren().size()-1, jfxButton);
+        xBoxMessageFormSet.getChildren().add(xBoxMessageFormSet.getChildren().size()-2, jfxButton);
         jfxButton.setOnMouseClicked(event -> sendMessage(event));
 
     }
 
-    @FXML
-    public void sendMessage(MouseEvent event) {
+    List<File> deletedButtonsFileList = new ArrayList<>();
+
+    public void deleteSelectedScheme(){
+
+        for (Node bt : xBoxMessageFormSet.getChildren()){
+            if (xBoxMessageFormSet.getChildren().size() > 3) {
+                if (bt.getStyleClass().contains("emailPressedBack")) {
+                    xBoxMessageFormSet.getChildren().remove(bt);
+                    file = new File(this.getClass().getResource("/style.css").getPath().substring(0, this.getClass().getResource("/style.css").getPath().lastIndexOf("/") + 1) + "/email_version" + bt.getId().substring(bt.getId().length() - 1) + ".txt");
+                    deletedButtonsFileList.add(file);
+                    file = null;
+            }
+            }else{
+                globalAlert = new Alert(Alert.AlertType.INFORMATION);
+                globalAlert.dialogPaneProperty().get();
+                globalAlert.setTitle("Błąd");
+                globalAlert.setHeaderText("Musi pozostać przynajmniej jeden szablon");
+                globalAlert.setResizable(false);
+                globalAlert.show();
+                globalAlert = null;
+                break;
+            }
+
+        }
+
+        deletedButtonsFileList.forEach(e -> e.deleteOnExit());
 
         subject_textField.setText("");
         content_areaField.setText("");
-        scanner = null;
-        file = null;
-        sb = new StringBuilder();
 
-        for (Node b : xBoxMessageFormSet.getChildren()) {
+    }
 
-            if (b.getId() != null) {
+    String path = "";
 
-                if (event.getSource() == b) {
+    @FXML
+    public void sendMessage(MouseEvent event) {
 
-                    b.getStyleClass().add("emailPressedBack");
+        try {
 
-                    try {
-                        file = new File(this.getClass().getResource("/style.css").getPath().substring(0,this.getClass().getResource("/style.css").getPath().lastIndexOf("/")+1)+"/email_version"+ b.getId().substring(b.getId().length() - 1) + ".txt");
-                        if (!file.exists()) file.createNewFile();
-                        else {
-                            scanner = new Scanner(new BufferedReader(new FileReader(file)));
-                            if (scanner.hasNext()) {
-                                subject_textField.setText(scanner.nextLine());
-                                while (scanner.hasNext()) {
-                                    sb.append(scanner.nextLine());
-                                    sb.append("\n");
+            subject_textField.setText("");
+            content_areaField.setText("");
+            file = null;
+            sb = new StringBuilder();
+
+            for (Node b : xBoxMessageFormSet.getChildren()) {
+
+                if (b.getId() != null) {
+
+                    if (event.getSource() == b) {
+
+                        b.getStyleClass().add("emailPressedBack");
+
+                        try {
+                            file = new File(this.getClass().getResource("/style.css").getPath().substring(0, this.getClass().getResource("/style.css").getPath().lastIndexOf("/") + 1) + "/email_version" + b.getId().substring(b.getId().length() - 1) + ".txt");
+                            path = file.getAbsolutePath();
+                            if (!file.exists()) file.createNewFile();
+                            else {
+                                scannerRead = new Scanner(new BufferedReader(new FileReader(file)));
+                                if (scannerRead.hasNext()) {
+                                    subject_textField.setText(scannerRead.nextLine());
+                                    while (scannerRead.hasNext()) {
+                                        sb.append(scannerRead.nextLine());
+                                        sb.append("\n");
+                                    }
+                                    System.out.println(sb.toString());
+                                    content_areaField.setText(sb.toString());
+                                    scannerRead.close();
+                                    file = null;
+                                    sb = null;
                                 }
-                                System.out.println(sb.toString());
-                                content_areaField.setText(sb.toString());
-                                scanner = null;
-                                sb = null;
                             }
+                        } catch (Exception e) {
+                            e.printStackTrace();
                         }
-                    } catch (Exception e) {
-                        e.printStackTrace();
+
+                    } else {
+
+                        b.getStyleClass().remove("emailPressedBack");
                     }
-
-                } else {
-
-                    b.getStyleClass().remove("emailPressedBack");
                 }
             }
-        }
-
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                //sendEmail.sendEmail();
-//            }
-//        }).start();
+        }catch (Exception e){ e.printStackTrace();}
     }
 
     public void saveNewEmail(){
         sb = new StringBuilder();
         try {
-            BufferedWriter wr = new BufferedWriter(new FileWriter(file.getPath()));
-            wr.write(subject_textField.getText());
-            wr.append("\n");
-            wr.append(content_areaField.getText());
-            wr.flush();
-            wr.close();
-            scanner = new Scanner(new BufferedReader(new FileReader(file)));
-        }catch (Exception e){ e.printStackTrace();}
+            try {
+                BufferedWriter wr = new BufferedWriter(new FileWriter(new File(path)));
+                wr.write(subject_textField.getText());
+                wr.append("\n");
+                wr.append(content_areaField.getText());
+                wr.flush();
+                wr.close();
+                scannerWrite = new Scanner(new BufferedReader(new FileReader(new File(path))));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
-        subject_textField.setText("");
-        content_areaField.setText("");
-        subject_textField.setText(scanner.nextLine());
-        while (scanner.hasNext()) {
-            sb.append(scanner.nextLine());
-            sb.append("\n");
-        }
-        content_areaField.setText(sb.toString());
-        scanner = null;
-        sb = null;
+            subject_textField.setText("");
+            content_areaField.setText("");
+            subject_textField.setText(scannerWrite.nextLine());
+            while (scannerWrite.hasNext()) {
+                sb.append(scannerWrite.nextLine());
+                sb.append("\n");
+            }
+            content_areaField.setText(sb.toString());
+            scannerWrite.close();
+            file = null;
+            sb = null;
+
+            globalAlert = new Alert(Alert.AlertType.INFORMATION);
+            globalAlert.dialogPaneProperty().get();
+            globalAlert.setTitle("Potwierdzenie");
+            globalAlert.setHeaderText("Zapisano zmiany");
+            globalAlert.setResizable(false);
+            globalAlert.show();
+            globalAlert = null;
+        }catch (Exception e){ e.printStackTrace();}
     }
 
     boolean lock = true;
@@ -288,7 +362,7 @@ public class Controller{
             File[] nam = file.listFiles();
             for (File b : nam) {
                 if (b.getName().contains("email")) {
-                    if (Integer.parseInt(b.getName().substring(b.getName().indexOf(".") - 1, b.getName().indexOf("."))) > 2)
+                    //if (Integer.parseInt(b.getName().substring(b.getName().indexOf(".") - 1, b.getName().indexOf("."))) > 2)
                         addNewMailForm();
                 }
             }
@@ -317,19 +391,7 @@ public class Controller{
 
     public void addRecord(){
 
-//        ol.add(new Orders(3,1, "Razor Electra V2", 2, 440, "Karol", "Nowak", "18-400 Lomza", date));
-//        ol.add(new Orders(3,3, "Razor Kraken PRO", 1, 300, "Karol", "Nowak", "18-400 Lomza", date));
-//        ol.add(new Orders(3,7, "ThreadRipper", 1, 4000, "Karol", "Nowak", "18-400 Lomza", date));
-//        ol.add(new Orders(6,127, "order 66 v2", 4, 14, "Kamil", "Namek", "23-450 Miastkowo", date));
-//        ol.add(new Orders(13,257, "GTX 1050Ti", 1, 721, "Kazimierz", "Wiesiek", "45-24 Mielno", date));
-//        ol.add(new Orders(13,314, "Intel Core i7", 1, 1223, "Kazimierz", "Wiesiek", "45-24 Mielno", date));
-//        ol.add(new Orders(6,178, "order 66", 4, 14, "Kamil", "Namek", "23-450 Miastkowo", date));
-//        ol.add(new Orders(13,216, "AMD Ryzen 7", 1, 1223, "Kazimierz", "Wiesiek", "45-24 Mielno", date));
-//        ol.add(new Orders(5,43, "CORsair oc", 1, 120, "Adam", "Piaseczny", "67-800 Ciechanow", date));
-//        ol.add(new Orders(15,6,"Dell",3,5,"Linkin","Park","90-300 Prochowice",date));
-
         ol.addAll(server.getAllOrders());
-
         ordersTableView.setItems(ol);
     }
 
@@ -347,36 +409,26 @@ public class Controller{
         ProductNameAv.setCellValueFactory(new PropertyValueFactory<Products, String>("productName"));
         AmountAv.setCellValueFactory(new PropertyValueFactory<Products, Integer>("amount"));
 
-        productsList.add(new Products(1, "Razor Electra V2", 500, 440));
-        productsList.add(new Products(2, "Razor Kraken PRO", 52, 300));
-        productsList.add(new Products(3, "ThreadRipper", 500, 4000));
-        productsList.add(new Products(4, "GTX 1050Ti", 400, 721));
-        productsList.add(new Products(5, "Intel Core i7", 500, 1223));
-        productsList.add(new Products(6, "AMD Ryzen 7", 500, 1223));
-        productsList.add(new Products(7, "CORsair oc", 500, 120));
-        productsList.add(new Products(8, "Dell", 32, 5));
-        productsList.add(new Products(9, "Asus Rouge Dominus Extreme", 500, 4700));
+        productsList.addAll(server.getAllProducts());
 
-
-
-        AmountAv.setCellFactory(column -> {
-            return new TableCell<Products, Integer>(){
-                @Override
-                protected void updateItem(Integer item, boolean empty) {
-                    super.updateItem(item, empty);
-
-                    TableRow table = getTableRow();
-
-                    if (!isEmpty()) {
-                        setText(""+item);
-                        if (item < 100)
-                       table.setStyle("-fx-background-color: #ed533b");
-                    }
-
-                }
-            };
-
-        });
+//        AmountAv.setCellFactory(column -> {
+//            return new TableCell<Products, Integer>(){
+//                @Override
+//                protected void updateItem(Integer item, boolean empty) {
+//                    super.updateItem(item, empty);
+//
+//                    TableRow table = getTableRow();
+//
+//                    if (!isEmpty()) {
+//                        //setText(""+item);
+//                        if (item < 100)
+//                       table.setStyle("-fx-background-color: #ed533b");
+//                    }
+//
+//                }
+//            };
+//
+//        });
 
         productsTableView.setItems(productsList);
     }
@@ -801,24 +853,30 @@ public class Controller{
 
     // procedure set beginning settings of software
 
-    Gauge gauge;
-    Products products;
-    User user;
+    private Gauge gauge;
+    private Products products;
+    private User user;
     List<String> dateStringTab;
-    List<UserOrderDate> dateAndOrderNumberList;
-    Map<Integer, Map<String, Integer>> idUserMonthsAmount;
-    Set keys;
-    String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    Integer[] digitMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ,11, 12};
-    String[] splitedMonths = null;
-    String singleDate = "";
-    int amountOfItems = 0;
-    LineChart<String, Number> userLineChart;
-    XYChart.Series series2;
-    CategoryAxis xAxis2 = new CategoryAxis();
-    NumberAxis yAxis2 = new NumberAxis();
-    int maxYChart = 0;
-    Map<String, Integer> pastOrders;
+    private List<UserOrderDate> dateAndOrderNumberList;
+    private List<UserOrderDate> dataSetSaleData;
+    private Map<Integer, Map<String, Integer>> idUserMonthsAmount;
+    private Set keys;
+    private String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    private Integer[] digitMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ,11, 12};
+    private String[] splitedMonths = null;
+    private String singleDate = "";
+    private int amountOfItems = 0;
+    private LineChart<String, Number> userLineChart;
+    private XYChart.Series series2;
+    private CategoryAxis xAxis2 = new CategoryAxis();
+    private NumberAxis yAxis2 = new NumberAxis();
+    private int maxYChart = 0;
+    private Map<String, Integer> pastOrders;
+    Map<String, Integer> holeSellment;
+    int innerValue = 0;
+
+    @FXML
+    private JFXTextField availabilityTextField;
 
     @FXML
     public void initialize() {
@@ -848,6 +906,49 @@ public class Controller{
                 }
             }
         }).start();
+
+
+
+        setGauge1 = GaugeBuilder.create().skinType(Gauge.SkinType.SLIM)
+                .prefSize(285,246)
+                .barColor(Color.rgb(57,47,47))
+                .valueColor(Color.rgb(57,47,47))
+                .barBackgroundColor(Color.rgb(25,120,168))
+                .animated(true)
+                .animationDuration(1000)
+                .build();
+
+        setPaneGuage1.getChildren().add(setGauge1);
+        setPaneGuage1.getChildren().get(setPaneGuage1.getChildren().size()-1).setLayoutX(25);
+        setPaneGuage1.getChildren().get(setPaneGuage1.getChildren().size()-1).setLayoutY(116);
+
+        setGauge2 = GaugeBuilder.create().skinType(Gauge.SkinType.SLIM)
+                .prefSize(285,246)
+                .barColor(Color.rgb(57,47,47))
+                .valueColor(Color.rgb(57,47,47))
+                .barBackgroundColor(Color.rgb(224,55,47))
+                .animated(true)
+                .animationDuration(1000)
+                .build();
+
+        setPaneGuage2.getChildren().add(setGauge2);
+        setPaneGuage2.getChildren().get(setPaneGuage2.getChildren().size()-1).setLayoutX(25);
+        setPaneGuage2.getChildren().get(setPaneGuage2.getChildren().size()-1).setLayoutY(116);
+
+        setGauge3 = GaugeBuilder.create().skinType(Gauge.SkinType.SLIM)
+                .prefSize(285,246)
+                .barColor(Color.rgb(57,47,47))
+                .valueColor(Color.rgb(57,47,47))
+                .barBackgroundColor(Color.rgb(20,181,18))
+                .animated(true)
+                .animationDuration(1000)
+                .build();
+
+        setPaneGuage3.getChildren().add(setGauge3);
+        setPaneGuage3.getChildren().get(setPaneGuage3.getChildren().size()-1).setLayoutX(25);
+        setPaneGuage3.getChildren().get(setPaneGuage3.getChildren().size()-1).setLayoutY(116);
+
+
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
@@ -918,13 +1019,34 @@ public class Controller{
         manegeProductPricePane.getChildren().add(priceProduct);
         manegeProductPricePane.setStyle("-fx-border-style: solid inside;");
 
+        manageNewID.setEditable(false);
+        manageNewName.setEditable(false);
+        manageNewPrice.setEditable(false);
+
         manageProductsTableView.setOnMouseClicked(event -> {
 
             products = manageProductsTableView.getSelectionModel().getSelectedItem();
             manegeProductIDLabel.setText(""+products.getId());
             manegeProductNameLabel.setText(products.getProductName());
             manegeProductPriceLabel.setText(""+products.getPrice());
+
+            idOldProduct.setText(""+products.getId());
+            nameOldProduct.setText(products.getProductName());
+            priceOldProduct.setText(""+products.getPrice());
+
+            manageNewID.setEditable(true);
+            manageNewName.setEditable(true);
+            manageNewPrice.setEditable(true);
         });
+
+        OldNewProductData oldNewProductData = new OldNewProductData();
+
+        manageNewID.textProperty().bindBidirectional(oldNewProductData.newIDProperty());
+        idNewProduct.textProperty().bind(oldNewProductData.newIDProperty());
+        manageNewName.textProperty().bindBidirectional(oldNewProductData.newNameProperty());
+        nameNewProduct.textProperty().bind(oldNewProductData.newNameProperty());
+        manageNewPrice.textProperty().bindBidirectional(oldNewProductData.newPriceProperty());
+        priceNewProduct.textProperty().bind(oldNewProductData.newPriceProperty());
 
         innerGridPaneTiltedPanel.getChildren().add(title);
         innerGridPaneTiltedPanel.setStyle("-fx-border-style: solid inside;");
@@ -1055,6 +1177,9 @@ public class Controller{
                 subUsersContentPane.getChildren().get(subUsersContentPane.getChildren().size() - 1).setLayoutY(610);
             }
 
+            singleDate = null;
+            splitedMonths = null;
+
         });
 
 
@@ -1098,9 +1223,79 @@ public class Controller{
         // *
         //find users END //
 
-    }
+        ObservableList<Products> typedProductsTableViewCollections = FXCollections.observableArrayList();
+        Comparator<Products> productsComparator = Comparator.comparing(Products::getId);
 
+        availabilityTextField.setOnKeyTyped(event -> {
+
+            productsList.forEach(pro -> {
+
+                if (pro.getProductName().contains(availabilityTextField.getText().toUpperCase())) {
+                    if (!typedProductsTableViewCollections.contains(pro))
+                        typedProductsTableViewCollections.add(pro);
+                }
+                else typedProductsTableViewCollections.remove(pro);
+            });
+
+
+            FXCollections.sort(typedProductsTableViewCollections, productsComparator);
+            productsTableView.setItems(typedProductsTableViewCollections);
+
+        });
+
+    }
     // procedure set beginning settings of software END
+
+    public void submitEditProductData(){
+
+        try {
+            if (manageNewName.getText().trim().length() <= 0) throw new NumberFormatException();
+            int k = Integer.parseInt(manageNewID.getText());
+            System.out.println(k);
+            int l = Integer.parseInt(manageNewPrice.getText());
+            System.out.println(l);
+
+
+            productsList.forEach(event ->{
+                if(event.getId() == k && manageProductsTableView.getSelectionModel().getSelectedItem().getId() != k) throw new IllegalAccessError();
+                if (event.getProductName().equals(manageNewName.getText()) && !manageProductsTableView.getSelectionModel().getSelectedItem().getProductName().equals(manageNewName.getText())) throw new IllegalAccessError();
+
+            });
+
+            server.editProduct(k, manageNewName.getText(), l, manageProductsTableView.getSelectionModel().getSelectedItem().getId());
+
+
+            globalAlert = new Alert(Alert.AlertType.INFORMATION);
+            globalAlert.dialogPaneProperty().get();
+            globalAlert.setTitle("Potwierdzenie");
+            globalAlert.setHeaderText("Dane edytowano pomyślnie");
+            globalAlert.setResizable(false);
+            globalAlert.show();
+            globalAlert = null;
+
+            manageProductsTableView.getItems().removeAll(productsList);
+            manageProductsTableView.getItems().addAll(server.getAllProducts());
+
+        }catch (NumberFormatException nfe){
+            globalAlert = new Alert(Alert.AlertType.ERROR);
+            globalAlert.dialogPaneProperty().get();
+            globalAlert.setTitle("Błąd danych");
+            globalAlert.setHeaderText("Podano niewłaściwe dane");
+            globalAlert.setResizable(false);
+            globalAlert.show();
+            globalAlert = null;
+        }catch (IllegalAccessError iae){
+            globalAlert = new Alert(Alert.AlertType.ERROR);
+            globalAlert.dialogPaneProperty().get();
+            globalAlert.setTitle("Błąd danych");
+            globalAlert.setHeaderText("Produkt o podanym danych już istnieje");
+            globalAlert.setResizable(false);
+            globalAlert.show();
+            globalAlert = null;
+        }
+
+
+    }
 
 
     public void initOrderTable()
@@ -1133,6 +1328,252 @@ public class Controller{
                 }
             }
         });
+
+    }
+
+    @FXML
+    private Label dataSetMainLabel, gauge1Label, gauge2Label, gauge3Label;
+
+    @FXML
+    private ProgressIndicator dataSetIndicator;
+
+    private int amountOfRegisteredUsers = 0;
+    private LineChart<String, Number> dataSetLineChart;
+    private XYChart.Series dataSetSeries;
+    private CategoryAxis xAxisDataSet = new CategoryAxis();
+    private NumberAxis yAxis2DataSet = new NumberAxis();
+    private int maxYChartDataSet = 0;
+    private double averageAmountOfRegisteredUsers = 0;
+    private Map<String, Integer> allRegisteredUsers;
+    private double lastRegistered = 0;
+    private Gauge setGauge1, setGauge2, setGauge3;
+    private boolean dataSetLock = false;
+    Timeline task;
+
+
+    public void setGuagesToZero(){
+        setGauge1.setValue(0);
+        setGauge2.setValue(0);
+        setGauge3.setValue(0);
+    }
+
+    public void dataSetRegisterUsersFunction(){
+
+
+        if (dataSetLock) {
+
+            //task = new Timeline(new KeyFrame(Duration.ZERO, new KeyValue(dataSetIndicator.progressProperty(), 0)), new KeyFrame(Duration.seconds(1), new KeyValue(dataSetIndicator.progressProperty(), 1)));
+            //task.playFromStart();
+            setGuagesToZero();
+          try {
+            Thread.sleep(1000);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        }
+        dataSetLock = true;
+
+        dataSetMainLabel.setText("Użytkownicy");
+        dataSetMainLabel.setStyle("-fx-background-color:  #6192da");
+
+        gauge1Label.setText("Ostatnio zarejestrowani");
+        gauge2Label.setText("Wszystkich zarejestrowanych");
+        gauge3Label.setText("Średnia rejestracji");
+
+
+        allRegisteredUsers = null;
+        dataSetSeries = null;
+        singleDate = null;
+        splitedMonths = null;
+        maxYChartDataSet = 0;
+
+        if (dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof LineChart || dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof Label)
+            dataSetContentPane.getChildren().remove(dataSetContentPane.getChildren().size()-1);
+
+        averageAmountOfRegisteredUsers = 0;
+        allRegisteredUsers = new LinkedHashMap<>();
+        dataSetSeries = new XYChart.Series<>();
+        for (String k : months) allRegisteredUsers.put(k, 0);
+
+        usersList.forEach(user -> {
+//
+                    singleDate = user.getDate().toString();
+                    splitedMonths = singleDate.split("-");
+                    singleDate = splitedMonths[1];
+                    if (singleDate.indexOf("0") == 0)
+                        singleDate.replace('0', '\0');
+
+                    for (Integer m : digitMonths) {
+                        if (m == Integer.parseInt(singleDate)) {
+
+                            amountOfRegisteredUsers = allRegisteredUsers.get(months[m-1]);
+                            amountOfRegisteredUsers++;
+                            allRegisteredUsers.put(months[m-1], amountOfRegisteredUsers);
+                        }
+                    }
+        });
+
+        for (Map.Entry kl : allRegisteredUsers.entrySet()) {
+            dataSetSeries.getData().add(new XYChart.Data<>(kl.getKey(), kl.getValue()));
+        }
+
+        ((ObservableList<XYChart.Data>) dataSetSeries.getData()).forEach(e -> {
+            if ((int) e.getYValue() < maxYChartDataSet) ;
+            else maxYChartDataSet = (int) e.getYValue();
+            averageAmountOfRegisteredUsers += (int) e.getYValue();
+        });
+
+        System.out.println(maxYChartDataSet);
+
+        xAxisDataSet = new CategoryAxis();
+        yAxis2DataSet = new NumberAxis(0, maxYChartDataSet + 1, 1);
+        dataSetLineChart = new LineChart<>(xAxisDataSet, yAxis2DataSet);
+
+        dataSetLineChart.getData().addAll(dataSetSeries);
+        dataSetLineChart.setLegendVisible(false);
+        dataSetContentPane.add(dataSetLineChart,0,1);
+
+
+        lastRegistered = 0;
+        allRegisteredUsers.forEach((ev, tw) ->{
+            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase())) lastRegistered = tw;
+        });
+        System.out.println(lastRegistered+"   "+LocalDate.now().getMonth().toString().toLowerCase()+"  "+averageAmountOfRegisteredUsers);  //wypisuje aktualny miesiac
+
+        setGauge1.setMaxValue(maxYChartDataSet+1);
+        setGauge1.setValue(lastRegistered);
+
+        setGauge2.setMaxValue(server.getAllUsers().size());
+        setGauge2.setValue(setGauge2.getMaxValue());
+
+        setGauge3.setMaxValue(100);
+        setGauge3.setValue((averageAmountOfRegisteredUsers/12)*100);
+
+    }
+
+    public void dataSetAverageSellmentFunction(){
+
+        setGuagesToZero();
+
+        try {
+            Thread.sleep(1000);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+        dataSetMainLabel.setText("Sprzedaż");
+        dataSetMainLabel.setStyle("-fx-background-color:  #f1413e");
+
+        gauge1Label.setText("Ostatnio sprzedano");
+        gauge2Label.setText("Wszystkich sprzedaży");
+        gauge3Label.setText("Średnia sprzedaży");
+
+
+        dataSetSeries = null;
+
+        if (dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof LineChart || dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof Label)
+            dataSetContentPane.getChildren().remove(dataSetContentPane.getChildren().size()-1);
+
+
+        maxYChartDataSet = 0;
+        dataSetSeries = new XYChart.Series<>();
+
+        setSaleLineChart();
+
+//        for (Map.Entry<String, Integer> map : holeSellment.entrySet())
+//            System.out.println(map.getKey()+"   "+map.getValue());
+
+        for (Map.Entry kl : holeSellment.entrySet()) {
+            dataSetSeries.getData().add(new XYChart.Data<>(kl.getKey(), kl.getValue()));
+        }
+
+        ((ObservableList<XYChart.Data>) dataSetSeries.getData()).forEach(e -> {
+            if ((int) e.getYValue() < maxYChartDataSet) ;
+            else maxYChartDataSet = (int) e.getYValue();
+            averageAmountOfRegisteredUsers += (int) e.getYValue();
+        });
+
+        System.out.println(lastRegistered+"   "+LocalDate.now().getMonth().toString().toLowerCase()+"  "+averageAmountOfRegisteredUsers);
+
+        xAxisDataSet = new CategoryAxis();
+        yAxis2DataSet = new NumberAxis(0, maxYChartDataSet + 1, 1);
+        dataSetLineChart = new LineChart<>(xAxisDataSet, yAxis2DataSet);
+
+        dataSetLineChart.getData().addAll(dataSetSeries);
+        dataSetLineChart.setLegendVisible(false);
+        dataSetContentPane.add(dataSetLineChart,0,1);
+
+        setGauge1.setMaxValue(maxYChartDataSet+1);
+        setGauge1.setValue(lastRegistered);
+
+        setGauge2.setMaxValue(server.getAllOrdersDate().size());
+        setGauge2.setValue(setGauge2.getMaxValue());
+
+        setGauge3.setMaxValue(100);
+        setGauge3.setValue((averageAmountOfRegisteredUsers/304)*100);
+
+
+        holeSellment = null;
+    }
+
+    public void setSaleLineChart(){
+
+        idUserMonthsAmount = new HashMap<>();
+        keys = idUserMonthsAmount.keySet();
+        holeSellment = new LinkedHashMap<>();
+
+        for (UserOrderDate us : dataSetSaleData) {
+
+            if (keys.isEmpty() || !keys.contains(us.getOrderID()))
+                idUserMonthsAmount.put(us.getOrderID(), new HashMap<>());
+
+            singleDate = us.getLocalDate().toString();
+            splitedMonths = singleDate.split("-");
+            singleDate = splitedMonths[1];
+            if (singleDate.indexOf("0") == 0)
+                singleDate.replace('0', '\0');
+
+            for (Integer m : digitMonths) {
+                if (m == Integer.parseInt(singleDate)) {
+                    if (idUserMonthsAmount.get(us.getOrderID()).keySet().isEmpty() || !idUserMonthsAmount.get(us.getOrderID()).keySet().contains(months[m - 1]))
+                        idUserMonthsAmount.get(us.getOrderID()).put(months[m - 1], us.getIlosc());
+                    else {
+                        amountOfItems = idUserMonthsAmount.get(us.getOrderID()).get(months[m - 1]);
+                        amountOfItems += us.getIlosc();
+                        idUserMonthsAmount.get(us.getOrderID()).put(months[m - 1], amountOfItems);
+                    }
+                }
+            }
+
+        }
+
+        for (String mon : months) if (!holeSellment.containsKey(mon)) holeSellment.put(mon, 0);
+
+        for (Map.Entry<Integer, Map<String, Integer>> map : idUserMonthsAmount.entrySet()){
+            System.out.println(map.getKey()+"------------------------");
+            for (Map.Entry<String, Integer> subMap : map.getValue().entrySet()){
+
+
+                if (!holeSellment.keySet().contains(subMap.getKey()))
+                    holeSellment.put(subMap.getKey(), subMap.getValue());
+                else{
+                    innerValue = holeSellment.get(subMap.getKey());
+                    innerValue += subMap.getValue();
+                    holeSellment.put(subMap.getKey(), innerValue);
+                }
+            }
+        }
+
+        holeSellment.forEach((ev, tw) ->{
+            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase())) lastRegistered = tw;
+        });
+
+        idUserMonthsAmount = null;
+        keys = null;
+    }
+
+    public void dataSetPopularProductsFunction(){
 
     }
 
@@ -1213,6 +1654,26 @@ public class Controller{
 
         changeFocusedButtonBackgroundColor(event.getSource());
         gauge.setValue(0);
+        setGuagesToZero();
+        dataSetLock = false;
+
+
+        manageNewID.setEditable(false);
+        manageNewName.setEditable(false);
+        manageNewPrice.setEditable(false);
+        manageNewID.setText("");
+        manageNewName.setText("");
+        manageNewPrice.setText("");
+        manegeProductIDLabel.setText("");
+        manegeProductNameLabel.setText("");
+        manegeProductPriceLabel.setText("");
+        idOldProduct.setText("");
+        nameOldProduct.setText("");
+        priceOldProduct.setText("");
+        manageProductsTableView.getSelectionModel().clearSelection();
+
+//        dataSetSaleData = null;
+//        dateAndOrderNumberList = null;
 
         if (event.getSource() == orders){
             setOrderHeaderLabel(orders.getText());
@@ -1220,6 +1681,31 @@ public class Controller{
             ordersContentPane.toFront();
             hideLists();
             click = true;
+
+//            UserOrderHibernate userOrderHibernate = new UserOrderHibernate();
+//            userOrderHibernate.setId(1);
+//            userOrderHibernate.setIlosc(6);
+//            EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("org.hibernate.tutorial.jpa");
+//            EntityManager entityManager = entityManagerFactory.createEntityManager();
+//            entityManager.persist(userOrderHibernate);
+//            entityManager.getTransaction().begin();
+//            entityManager.getTransaction().commit();
+//            entityManager.close();
+            //SessionFactory sessionFactory = new Configuration().configure().buildSessionFactory();
+            //Session session = sessionFactory.getCurrentSession();
+            //session.getTransaction().begin();
+
+            String sql = "select id,ilosc from UserOrderHibernate";
+
+            //Query<UserOrderHibernate> query = session.createQuery(sql);
+
+            List<UserOrderHibernate> list=null;// = query.getResultList();
+
+            //session.getTransaction().commit();
+
+            //for (UserOrderHibernate us : list)
+              //  System.out.println(us);
+
         }
 
         if (event.getSource() == availability) {
@@ -1256,6 +1742,10 @@ public class Controller{
             hideLists();
             click = true;
             dataSetContentPane.toFront();
+            dataSetRegisterUsersFunction();
+            dataSetSaleData = server.getAllOrdersDate();
+            //dataSetAverageSellmentFunction();
+
         }
 
         if (event.getSource() == users){
@@ -1291,8 +1781,6 @@ public class Controller{
     public AnchorPane getMainPane(){ return mainPane;}
 
     public void closeWindow() throws Exception{
-
-
         closeWindowController.closeWindow();
     }
 

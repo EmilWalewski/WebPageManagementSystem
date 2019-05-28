@@ -31,7 +31,7 @@ public class Orders implements IOrders {
         this.townCode = new SimpleStringProperty(townCode);
         this.street = new SimpleStringProperty(street);
         this.houseNumber = new SimpleStringProperty(houseNumber);
-        this.date = new Date(); //this.state = new SimpleStringProperty(state);
+        this.date = date; //this.state = new SimpleStringProperty(state);
         this.checkProperty = new SimpleBooleanProperty(false);
         checkBox = new CheckBox();
     }
@@ -64,7 +64,7 @@ public class Orders implements IOrders {
 
     //public String getState(){ return state.get(); }
 
-    public LocalDate getDate(){ return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate(); }
+    public Date getDate(){ return date; }
 
     public CheckBox getCheckBox(){ return checkBox; }
 
