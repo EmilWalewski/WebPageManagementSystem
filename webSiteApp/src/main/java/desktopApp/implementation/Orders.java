@@ -11,13 +11,13 @@ import java.util.Date;
 public class Orders implements IOrders {
 
     private IntegerProperty productID, amount, price, orderNumber;
-    private StringProperty town, townCode, street, houseNumber, productName, state, name, surname;
+    private StringProperty town, townCode, street, houseNumber, productName, state, name, surname, email;
     private BooleanProperty checkProperty;
     private Date date;
     private CheckBox checkBox;
 
     public Orders(int orderNumber, int productID, String productName, int amount, int price,
-                  String name, String surname, String town, String townCode,
+                  String name, String surname, String email, String town, String townCode,
                   String street, String houseNumber, Date date /*String state*/){
 
         this.orderNumber = new SimpleIntegerProperty(orderNumber);
@@ -27,6 +27,7 @@ public class Orders implements IOrders {
         this.price = new SimpleIntegerProperty(price);
         this.name = new SimpleStringProperty(name);
         this.surname = new SimpleStringProperty(surname);
+        this.email = new SimpleStringProperty(email);
         this.town = new SimpleStringProperty(town);
         this.townCode = new SimpleStringProperty(townCode);
         this.street = new SimpleStringProperty(street);
@@ -46,6 +47,9 @@ public class Orders implements IOrders {
 
     @Override
     public String getStreet() { return street.get(); }
+
+    @Override
+    public String getEmail() { return email.get(); }
 
     @Override
     public String getHouseNumber() { return houseNumber.get(); }
@@ -71,7 +75,7 @@ public class Orders implements IOrders {
     @Override
     public String toString() {
         return getOrderNumber()+"/"+getProductID()+"/"+getProductName()+"/"+getAmount()+"/"+getPrice()+"/"+getName()+"/"
-            +getSurname()+"/"+getTown()+"/"+getTownCode()+"/"+getStreet()+"/"+getHouseNumber()+"/"+getDate();
+            +getSurname()+"/"+getEmail()+"/"+getTown()+"/"+getTownCode()+"/"+getStreet()+"/"+getHouseNumber()+"/"+getDate();
     }
 }
 

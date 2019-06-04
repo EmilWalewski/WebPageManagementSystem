@@ -41,18 +41,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.stage.Stage;
-import javafx.stage.StageStyle;
-import javafx.util.Duration;
-import org.hibernate.Session;
-import org.hibernate.SessionFactory;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.boot.model.source.internal.hbm.HibernateTypeSourceImpl;
-import org.hibernate.boot.model.source.spi.HibernateTypeSource;
-import org.hibernate.jpa.HibernatePersistenceProvider;
-import org.hibernate.jpa.HibernateQuery;
-import org.hibernate.proxy.HibernateProxy;
-import org.hibernate.proxy.HibernateProxyHelper;
 import org.hibernate.query.Query;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -63,14 +51,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import java.io.*;
-import java.nio.file.CopyOption;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.*;
 
 @Component
@@ -87,7 +68,7 @@ public class Controller{
     ProgressIndicator prog;
 
     @FXML
-    AnchorPane mainPane, dashBoardInformation, subUsersContentPane, setPaneGuage1, setPaneGuage2, setPaneGuage3;
+    AnchorPane mainPane, dashBoardInformation, subUsersContentPane, setPaneGuage1, setPaneGuage2, setPaneGuage3, sentMerchandiseContentPane;
 
     @FXML
     Label topLabel; // tabs tilted label
@@ -105,7 +86,7 @@ public class Controller{
     VBox menuVBox, vbox2, vbox3; // hidden menu bar
 
     @FXML
-    GridPane availabilityContentPane, takeSupplyContentPane, sentMessageContentPane, sentMerchandiseContentPane, dataSetContentPane, gridRecipe, recipeProductsGridPane;
+    GridPane availabilityContentPane, takeSupplyContentPane, sentMessageContentPane, dataSetContentPane, gridRecipe, recipeProductsGridPane;
 
     @FXML
     Pane innerGridPaneTiltedPanel, dashBoardGaugePane; // Customer Recipe pane, contain info about seller
@@ -132,7 +113,7 @@ public class Controller{
     TableView<Products> manageProductsTableView;
 
     @FXML
-    TableColumn OrderNumber, Town, TownCode, Street, HouseNumber, ProductID, ProductName, Amount, Price, Name, Surname, orderDate,/*State*/ Action; // table columns of orders table in orders tab
+    TableColumn OrderNumber, Town, TownCode, Street, HouseNumber, ProductID, ProductName, Amount, Price, Name, Surname, OrderEmail, orderDate,/*State*/ Action; // table columns of orders table in orders tab
 
     @FXML
     TableColumn ID, Username, Email; // users table columns
@@ -176,11 +157,11 @@ public class Controller{
 
     // tabs topLabel set methods //
 
-    StringProperty orderHeaderLabel = new SimpleStringProperty("Orders");
+    private StringProperty orderHeaderLabel = new SimpleStringProperty("Orders");
 
-    public StringProperty orderHeaderLabelProperty() { return orderHeaderLabel; }
+    private StringProperty orderHeaderLabelProperty() { return orderHeaderLabel; }
 
-    public void setOrderHeaderLabel(String orderHeaderLabel) { this.orderHeaderLabel.set(orderHeaderLabel); }
+    private void setOrderHeaderLabel(String orderHeaderLabel) { this.orderHeaderLabel.set(orderHeaderLabel); }
 
     // tabs topLabel set methods END //
 
@@ -217,9 +198,49 @@ public class Controller{
     File file;
     StringBuilder sb;
 
+    int idButtonsCounter = 1;
     public void addNewMailForm(){
+
+        getButtonsID();
+
+        if (idMailsButtons.contains("email"+idButtonsCounter)) {
+            idButtonsCounter++;
+            addNewMailForm();
+        }else
+            if (xBoxMessageFormSet.getChildren().size() < 6) addNewSubFunction(""+idButtonsCounter);
+            else{
+                globalAlert = new Alert(Alert.AlertType.ERROR);
+                globalAlert.dialogPaneProperty().get();
+                globalAlert.setTitle("Błąd");
+                globalAlert.setHeaderText("Można dodać nie więcej niż 4 szablony wiadomości");
+                globalAlert.setResizable(false);
+                globalAlert.show();
+                globalAlert = null;
+            }
+    }
+
+    List<String> idMailsButtons = new ArrayList<>();
+
+    public void getButtonsID(){
+
+        xBoxMessageFormSet.getChildren().forEach(e -> {
+            if (e.getId() != null) {
+                if (!idMailsButtons.contains(e.getId()))
+                idMailsButtons.add(e.getId());
+            }
+        });
+    }
+
+    public void removeButton(String id){
+
+        idButtonsCounter = 1;
+        idMailsButtons.remove(id);
+
+    }
+
+    public void addNewSubFunction(String number){
         JFXButton jfxButton = new JFXButton();
-        jfxButton.setId("email"+(xBoxMessageFormSet.getChildren().size()-1));
+        jfxButton.setId("email"+number);
         jfxButton.setPrefSize(135,163);
         jfxButton.setAlignment(Pos.CENTER);
         jfxButton.setPadding(new Insets(0,0,0,2));
@@ -231,19 +252,21 @@ public class Controller{
         jfxButton.getStyleClass().add("emailPressed");
         xBoxMessageFormSet.getChildren().add(xBoxMessageFormSet.getChildren().size()-2, jfxButton);
         jfxButton.setOnMouseClicked(event -> sendMessage(event));
-
     }
 
     List<File> deletedButtonsFileList = new ArrayList<>();
 
     public void deleteSelectedScheme(){
 
+        JFXButton tes = null;
+
         for (Node bt : xBoxMessageFormSet.getChildren()){
             if (xBoxMessageFormSet.getChildren().size() > 3) {
                 if (bt.getStyleClass().contains("emailPressedBack")) {
-                    xBoxMessageFormSet.getChildren().remove(bt);
+                    tes = (JFXButton) bt;
                     file = new File(this.getClass().getResource("/style.css").getPath().substring(0, this.getClass().getResource("/style.css").getPath().lastIndexOf("/") + 1) + "/email_version" + bt.getId().substring(bt.getId().length() - 1) + ".txt");
                     deletedButtonsFileList.add(file);
+                    removeButton(file.getName().substring(file.getName().indexOf(".")-1, file.getName().indexOf(".")));
                     file = null;
             }
             }else{
@@ -259,7 +282,7 @@ public class Controller{
 
         }
 
-        deletedButtonsFileList.forEach(e -> e.deleteOnExit());
+        xBoxMessageFormSet.getChildren().remove(tes);
 
         subject_textField.setText("");
         content_areaField.setText("");
@@ -270,8 +293,6 @@ public class Controller{
 
     @FXML
     public void sendMessage(MouseEvent event) {
-
-        try {
 
             subject_textField.setText("");
             content_areaField.setText("");
@@ -298,29 +319,28 @@ public class Controller{
                                         sb.append(scannerRead.nextLine());
                                         sb.append("\n");
                                     }
-                                    System.out.println(sb.toString());
                                     content_areaField.setText(sb.toString());
-                                    scannerRead.close();
-                                    file = null;
-                                    sb = null;
                                 }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
 
+                        System.out.println(b.getId());
                     } else {
 
                         b.getStyleClass().remove("emailPressedBack");
                     }
                 }
             }
-        }catch (Exception e){ e.printStackTrace();}
+
+        scannerRead.close();
+        file = null;
+        sb = null;
     }
 
     public void saveNewEmail(){
         sb = new StringBuilder();
-        try {
             try {
                 BufferedWriter wr = new BufferedWriter(new FileWriter(new File(path)));
                 wr.write(subject_textField.getText());
@@ -352,7 +372,6 @@ public class Controller{
             globalAlert.setResizable(false);
             globalAlert.show();
             globalAlert = null;
-        }catch (Exception e){ e.printStackTrace();}
     }
 
     boolean lock = true;
@@ -362,8 +381,7 @@ public class Controller{
             File[] nam = file.listFiles();
             for (File b : nam) {
                 if (b.getName().contains("email")) {
-                    //if (Integer.parseInt(b.getName().substring(b.getName().indexOf(".") - 1, b.getName().indexOf("."))) > 2)
-                        addNewMailForm();
+                    addNewSubFunction(b.getName().substring(b.getName().indexOf(".")-1, b.getName().indexOf(".")));
                 }
             }
             file = null;
@@ -548,7 +566,7 @@ public class Controller{
 
         for (Map.Entry c: setWholeOrders) {
 
-            orderDetailListView.getItems().add("Order "+c.getKey()); //set value of listView
+            orderDetailListView.getItems().add("Zamowienie nr "+c.getKey()); //set value of listView
             setDetailsOnce = true; //next customer unlock blockade
             productsDetailsMapper.put((Integer) c.getKey(), new ArrayList<>()); //set new ArrayList<String[]> under loop key
             userShoppingPeriodMap.put((Integer)c.getKey(), new ArrayList()); // set new ArrayList<List> under loop key
@@ -580,7 +598,10 @@ public class Controller{
                         if (j == 9)
                             personalDetailsMapper.get(c.getKey()).add(buff[j]);
 
-                        if (j == 10){
+                        if (j == 10)
+                            personalDetailsMapper.get(c.getKey()).add(buff[j]);
+
+                        if (j == 11){
                             personalDetailsMapper.get(c.getKey()).add(buff[j]);
                             setDetailsOnce = false;
                         }
@@ -602,7 +623,7 @@ public class Controller{
                        productsDetailsMapper.get(c.getKey()).add(man);  //add string[] to suitable list - Map<Integer, List<String[]>>
                        productsDetails.removeAll(productsDetails); //clear all list
                     }
-                    if (j % 11 == 0){
+                    if (j % 12 == 0){
                         if (buff[j].contains("-")) {
                             if (buff[j].contains("]") || buff[j].contains("[")) {
                                 buff[j] = buff[j].replace(']', '\0');
@@ -679,16 +700,15 @@ public class Controller{
         }
 
         //get element from map Map<Integer, List<String>>
-        l = personalDetailsMapper.get(Integer.parseInt(String.valueOf(((String) orderDetailListView.getSelectionModel().getSelectedItem()).substring(6))));
-
+        l = personalDetailsMapper.get(Integer.parseInt(String.valueOf(((String) orderDetailListView.getSelectionModel().getSelectedItem()).substring(14))));
 
         //set customer details
         nameSurnameLabel.setText(l.get(0)+" "+l.get(1));
-        addressLabel.setText(l.get(2)+" "+l.get(3));
-        streetLabel.setText(l.get(4)+" "+l.get(5));
+        addressLabel.setText(l.get(3)+" "+l.get(4));
+        streetLabel.setText(l.get(5)+" "+l.get(6));
 
         // get element from map Map<Integer, List<String[]>>, there is list only products : idProduct, productName, amount, price
-        ban = productsDetailsMapper.get(Integer.parseInt(String.valueOf(orderDetailListView.getSelectionModel().getSelectedItem()).substring(6)));
+        ban = productsDetailsMapper.get(Integer.parseInt(String.valueOf(orderDetailListView.getSelectionModel().getSelectedItem()).substring(14)));
 
 
         String pom = "";
@@ -915,7 +935,7 @@ public class Controller{
                 .valueColor(Color.rgb(57,47,47))
                 .barBackgroundColor(Color.rgb(25,120,168))
                 .animated(true)
-                .animationDuration(1000)
+                .animationDuration(600)
                 .build();
 
         setPaneGuage1.getChildren().add(setGauge1);
@@ -928,7 +948,7 @@ public class Controller{
                 .valueColor(Color.rgb(57,47,47))
                 .barBackgroundColor(Color.rgb(224,55,47))
                 .animated(true)
-                .animationDuration(1000)
+                .animationDuration(600)
                 .build();
 
         setPaneGuage2.getChildren().add(setGauge2);
@@ -941,7 +961,7 @@ public class Controller{
                 .valueColor(Color.rgb(57,47,47))
                 .barBackgroundColor(Color.rgb(20,181,18))
                 .animated(true)
-                .animationDuration(1000)
+                .animationDuration(600)
                 .build();
 
         setPaneGuage3.getChildren().add(setGauge3);
@@ -985,7 +1005,18 @@ public class Controller{
         //serwer.getAllUsers();
         dashBoardInformation.toFront();
         topLabel.setText(dashBoard.getText());
-        loadUsers(); //add users to user tab to userTableView
+        try {
+            loadUsers(); //add users to user tab to userTableView
+        }catch (Exception e){
+            globalAlert = new Alert(Alert.AlertType.CONFIRMATION);
+            globalAlert.dialogPaneProperty().get();
+            globalAlert.setTitle("Błąd");
+            globalAlert.setHeaderText("Nie można nawiązać połączenia z bazą danych");
+            globalAlert.setResizable(false);
+            if (globalAlert.getResult() == ButtonType.OK){
+                System.exit(0);
+            }
+        }
         addProducts(); //add products to warehouse tab to availability to productsTableView
         addManageProducts(); ////add products to warehouse tab to manage products to manageproductsTableView
         initOrderTable(); //initialize orderTableView
@@ -1308,6 +1339,7 @@ public class Controller{
         Price.setCellValueFactory(new PropertyValueFactory<Orders, Integer>("price"));
         Name.setCellValueFactory(new PropertyValueFactory<Orders, String>("name"));
         Surname.setCellValueFactory(new PropertyValueFactory<Orders, String>("surname"));
+        OrderEmail.setCellValueFactory(new PropertyValueFactory<Orders, String>("email"));
         Town.setCellValueFactory(new PropertyValueFactory<Orders, String>("town"));
         TownCode.setCellValueFactory(new PropertyValueFactory<Orders, String>("townCode"));
         Street.setCellValueFactory(new PropertyValueFactory<Orders, String>("street"));
@@ -1333,9 +1365,6 @@ public class Controller{
 
     @FXML
     private Label dataSetMainLabel, gauge1Label, gauge2Label, gauge3Label;
-
-    @FXML
-    private ProgressIndicator dataSetIndicator;
 
     private int amountOfRegisteredUsers = 0;
     private LineChart<String, Number> dataSetLineChart;
@@ -1366,7 +1395,7 @@ public class Controller{
             //task.playFromStart();
             setGuagesToZero();
           try {
-            Thread.sleep(1000);
+            Thread.sleep(600);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1386,6 +1415,7 @@ public class Controller{
         singleDate = null;
         splitedMonths = null;
         maxYChartDataSet = 0;
+        averageAmountOfRegisteredUsers = 0;
 
         if (dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof LineChart || dataSetContentPane.getChildren().get(dataSetContentPane.getChildren().size()-1) instanceof Label)
             dataSetContentPane.getChildren().remove(dataSetContentPane.getChildren().size()-1);
@@ -1436,7 +1466,7 @@ public class Controller{
 
         lastRegistered = 0;
         allRegisteredUsers.forEach((ev, tw) ->{
-            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase())) lastRegistered = tw;
+            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase().substring(0, 3))) lastRegistered = tw;
         });
         System.out.println(lastRegistered+"   "+LocalDate.now().getMonth().toString().toLowerCase()+"  "+averageAmountOfRegisteredUsers);  //wypisuje aktualny miesiac
 
@@ -1456,7 +1486,7 @@ public class Controller{
         setGuagesToZero();
 
         try {
-            Thread.sleep(1000);
+            Thread.sleep(600);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1566,14 +1596,34 @@ public class Controller{
         }
 
         holeSellment.forEach((ev, tw) ->{
-            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase())) lastRegistered = tw;
+            if (ev.toLowerCase().equals(LocalDate.now().getMonth().toString().toLowerCase().substring(0, 3))) lastRegistered = tw;
         });
 
         idUserMonthsAmount = null;
         keys = null;
     }
 
+
+    Map<Integer, String> emailMapper;
+    @FXML
+    TableView emailList;
+    @FXML
+    TableColumn Mail, mailTemplate;
     public void dataSetPopularProductsFunction(){
+
+        emailMapper = new LinkedHashMap<>();
+        int tw;
+
+        Mail.setCellValueFactory(new PropertyValueFactory<EmailList, String>("idUserMailUser"));
+        mailTemplate.setCellValueFactory(new PropertyValueFactory<EmailList, String>("comboBox"));
+
+        Iterator<Integer> itr = personalDetailsMapper.keySet().iterator();
+        while (itr.hasNext()){
+            tw = itr.next();
+            emailMapper.put(tw, personalDetailsMapper.get(tw).get(2));
+        }
+
+        emailMapper.forEach((e,f) ->  emailList.getItems().add(e+"/"+f));
 
     }
 
@@ -1657,6 +1707,15 @@ public class Controller{
         setGuagesToZero();
         dataSetLock = false;
 
+        if (!deletedButtonsFileList.isEmpty()) {
+            for (Iterator<File> it = deletedButtonsFileList.iterator(); it.hasNext(); ) {
+                File next = it.next();
+                if (next.exists()) {
+                    next.delete();
+                }
+                it.remove();
+            }
+        }
 
         manageNewID.setEditable(false);
         manageNewName.setEditable(false);

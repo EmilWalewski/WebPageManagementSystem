@@ -93,6 +93,7 @@ public class UserDAO implements IUserDAO {
                     resultSet.getInt("cena"),
                     resultSet.getString("imie"),
                     resultSet.getString("nazwisko"),
+                    resultSet.getString("email"),
                     resultSet.getString("miasto"),
                     resultSet.getString("kod"),
                     resultSet.getString("adres"),
