@@ -1,5 +1,8 @@
 # PreWare Manager
 
-This program allow register user to manipulate a content of website.
+Requirements:
 
-- Software is in developing process
+Java JDK 1.8
+
+
+
