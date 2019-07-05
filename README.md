@@ -1,4 +1,4 @@
-# WebSiteManagementSystem
+# PreWare Manager
 
 This program allow register user to manipulate a content of website.
 
