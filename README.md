@@ -4,5 +4,5 @@ The PreWare Manager application is designed to manage the resources of an online
 
 Requirements:
 - Java JDK 1.8 or newer
-- xampp
+- XAMPP
 - in phpmyadmin, create a database named webprototype and import a copy of the database attached to the program directory
