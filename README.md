@@ -1,5 +1,8 @@
-# WebSiteManagementSystem
+<p align="center"><img src="http://preware.cba.pl/appLogo.png"></p>
 
-This program allow register user to manipulate a content of website.
+The PreWare Manager application is designed to manage the resources of an online store and helps to create a graphical representation of sales and registration statistics.
 
-- Software is in developing process
+Requirements:
+- Java JDK 1.8 or newer
+- XAMPP
+- in phpmyadmin, create a database named webprototype and import a copy of the database attached to the program directory
